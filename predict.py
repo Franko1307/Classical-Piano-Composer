@@ -2,12 +2,16 @@
     trained neural network """
 import pickle
 import numpy
+from model import get_model
 from music21 import instrument, note, stream, chord
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Dropout
 from keras.layers import LSTM
 from keras.layers import Activation
+
+import os
+import subprocess
 
 def generate():
     """ Generate a piano midi file """
@@ -21,7 +25,7 @@ def generate():
     n_vocab = len(set(notes))
 
     network_input, normalized_input = prepare_sequences(notes, pitchnames, n_vocab)
-    model = create_network(normalized_input, n_vocab)
+    model = get_model(normalized_input, n_vocab, weights='weights/sgd/weights-improvement-199-3.3493-bigger.hdf5')
     prediction_output = generate_notes(model, network_input, pitchnames, n_vocab)
     create_midi(prediction_output)
 
@@ -48,28 +52,7 @@ def prepare_sequences(notes, pitchnames, n_vocab):
 
     return (network_input, normalized_input)
 
-def create_network(network_input, n_vocab):
-    """ create the structure of the neural network """
-    model = Sequential()
-    model.add(LSTM(
-        512,
-        input_shape=(network_input.shape[1], network_input.shape[2]),
-        return_sequences=True
-    ))
-    model.add(Dropout(0.3))
-    model.add(LSTM(512, return_sequences=True))
-    model.add(Dropout(0.3))
-    model.add(LSTM(512))
-    model.add(Dense(256))
-    model.add(Dropout(0.3))
-    model.add(Dense(n_vocab))
-    model.add(Activation('softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
-    # Load the weights to each node
-    model.load_weights('weights.hdf5')
-
-    return model
 
 def generate_notes(model, network_input, pitchnames, n_vocab):
     """ Generate notes from the neural network based on a sequence of notes """
@@ -88,7 +71,10 @@ def generate_notes(model, network_input, pitchnames, n_vocab):
 
         prediction = model.predict(prediction_input, verbose=0)
 
-        index = numpy.argmax(prediction)
+        _max = sum(prediction[0])
+        selection_prbs = [val/_max for val in prediction[0]]
+        index = numpy.random.choice(len(prediction[0]), p=selection_prbs)
+
         result = int_to_note[index]
         prediction_output.append(result)
 
@@ -130,5 +116,26 @@ def create_midi(prediction_output):
 
     midi_stream.write('midi', fp='test_output.mid')
 
+def convertMidi2Mp3():
+    """
+    将神经网络生成的 MIDI 文件转成 MP3 文件
+    """
+    input_file = 'test_output.mid'
+    output_file = 'output.mp3'
+
+    # 验证一下是否存在
+    assert os.path.exists(input_file)
+
+    print('Converting %s to MP3' % input_file)
+
+    # 用 timidity 生成 mp3 文件(写一个命令行的命令)
+    command = 'timidity {} -Ow -o - | ffmpeg -i - -acodec libmp3lame -ab 64k {}'.format(input_file, output_file)
+    # 运行这个命令
+    subprocess.call(command, shell=True)
+
+    print('Converted. Generated file is %s' % output_file)
+
+
 if __name__ == '__main__':
     generate()
+    convertMidi2Mp3()

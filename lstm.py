@@ -3,6 +3,7 @@
 import glob
 import pickle
 import numpy
+from model import get_model
 from music21 import converter, instrument, note, chord
 from keras.models import Sequential
 from keras.layers import Dense
@@ -21,7 +22,7 @@ def train_network():
 
     network_input, network_output = prepare_sequences(notes, n_vocab)
 
-    model = create_network(network_input, n_vocab)
+    model = get_model(network_input, n_vocab)
 
     train(model, network_input, network_output)
 
@@ -38,7 +39,7 @@ def get_notes():
 
         try: # file has instrument parts
             s2 = instrument.partitionByInstrument(midi)
-            notes_to_parse = s2.parts[0].recurse() 
+            notes_to_parse = s2.parts[0].recurse()
         except: # file has notes in a flat structure
             notes_to_parse = midi.flat.notes
 
@@ -55,7 +56,7 @@ def get_notes():
 
 def prepare_sequences(notes, n_vocab):
     """ Prepare the sequences used by the Neural Network """
-    sequence_length = 100
+    sequence_length = 20
 
     # get all pitch names
     pitchnames = sorted(set(item for item in notes))
@@ -84,29 +85,10 @@ def prepare_sequences(notes, n_vocab):
 
     return (network_input, network_output)
 
-def create_network(network_input, n_vocab):
-    """ create the structure of the neural network """
-    model = Sequential()
-    model.add(LSTM(
-        512,
-        input_shape=(network_input.shape[1], network_input.shape[2]),
-        return_sequences=True
-    ))
-    model.add(Dropout(0.3))
-    model.add(LSTM(512, return_sequences=True))
-    model.add(Dropout(0.3))
-    model.add(LSTM(512))
-    model.add(Dense(256))
-    model.add(Dropout(0.3))
-    model.add(Dense(n_vocab))
-    model.add(Activation('softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
-
-    return model
 
 def train(model, network_input, network_output):
     """ train the neural network """
-    filepath = "weights-improvement-{epoch:02d}-{loss:.4f}-bigger.hdf5"
+    filepath = "weights/adam/weights-improvement-{epoch:02d}-{loss:.4f}-bigger.hdf5"
     checkpoint = ModelCheckpoint(
         filepath,
         monitor='loss',
@@ -116,7 +98,7 @@ def train(model, network_input, network_output):
     )
     callbacks_list = [checkpoint]
 
-    model.fit(network_input, network_output, epochs=200, batch_size=64, callbacks=callbacks_list)
+    model.fit(network_input, network_output, epochs=250, batch_size=16, callbacks=callbacks_list)
 
 if __name__ == '__main__':
     train_network()
